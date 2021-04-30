@@ -1,5 +1,5 @@
 """
-Eval on real images from input/*_normalize.png, output to output/
+Eval on CT data
 """
 import math
 import sys
@@ -20,13 +20,6 @@ from PIL import Image
 
 
 def extra_args(parser):
-    parser.add_argument(
-        "--input",
-        "-I",
-        type=str,
-        default=os.path.join(ROOT_DIR, "input"),
-        help="Image directory",
-    )
     parser.add_argument(
         "--output",
         "-O",
@@ -110,23 +103,42 @@ render_poses = torch.stack(
 render_rays = util.gen_rays(render_poses, W, H, focal, z_near, z_far).to(device=device)
 
 
-inputs_all = os.listdir(args.input)
-inputs = [
-    os.path.join(args.input, x) for x in inputs_all if x.endswith("_normalize.png")
-]
-os.makedirs(args.output, exist_ok=True)
+# Params
+#num_images = 11
+#num_images = 11
+num_images = 6
+output_name = 'eval_real_ct_out'
 
-if len(inputs) == 0:
-    if len(inputs_all) == 0:
-        print("No input images found, please place an image into ./input")
-    else:
-        print("No processed input images found, did you run 'scripts/preproc.py'?")
-    import sys
+cam_poses = []
+cam_pose = torch.eye(4, device=device)
+cam_pose[2, -1] = args.radius
+cam_poses.append(cam_pose)
+for i in range(1, num_images):
+    cam_pose = torch.eye(4, device=device)
 
-    sys.exit(1)
+    #angle = (math.pi / 6.0) * i  # 30 degs
+    angle = (math.pi / 3.0) * i  # 30 degs
 
-cam_pose_1 = torch.eye(4, device=device)
-cam_pose_1[2, -1] = args.radius
+    # R_x
+    #cam_pose_2[1, 1] = math.cos(angle)
+    #cam_pose_2[1, 2] = -math.sin(angle)
+    #cam_pose_2[2, 1] = math.sin(angle)
+    #cam_pose_2[2, 2] = math.cos(angle)
+
+    # R_y
+    cam_pose[0, 0] = math.cos(angle)
+    cam_pose[2, 0] = -math.sin(angle)
+    cam_pose[0, 2] = math.sin(angle)
+    cam_pose[2, 2] = math.cos(angle)
+
+    # R_z
+    #cam_pose_2[0, 0] = math.cos(angle)
+    #cam_pose_2[0, 1] = -math.sin(angle)
+    #cam_pose_2[1, 0] = math.sin(angle)
+    #cam_pose_2[1, 1] = math.cos(angle)
+    cam_poses.append(cam_pose)
+
+'''
 #angle = 0
 #elevation = 0
 #radius = args.radius
@@ -169,6 +181,8 @@ cam_pose_2[2, 2] = math.cos(angle)
 #cam_pose_2[0, -1] = args.radius
 #cam_pose_2 = cam_pose_2.unsqueeze(0)
 cam_poses = torch.stack((cam_pose_1, cam_pose_2))
+'''
+cam_poses = torch.stack(cam_poses)
 cam_poses = cam_poses.unsqueeze(0)
 print(cam_poses)
 #exit()
@@ -182,18 +196,14 @@ with torch.no_grad():
     #for i, image_path in enumerate(inputs):
     #image_path_1 = 'input/1_normalize.png'
     #image_path_2 = 'input/2_normalize.png'
-    image_path_1 = 'input/0.png'
-    image_path_2 = 'input/1.png'
-    image1 = Image.open(image_path_1).convert("RGB")
-    image1 = T.Resize(in_sz)(image1)
-    image1 = image_to_tensor(image1).to(device=device)
-    #image1 = image1.unsqueeze(0)
-    image2 = Image.open(image_path_2).convert("RGB")
-    image2 = T.Resize(in_sz)(image2)
-    image2 = image_to_tensor(image2).to(device=device)
-    #image2 = image2.unsqueeze(0)
-
-    images = torch.stack((image1, image2))
+    images = []
+    for i in range(num_images):
+        image_path = f'input/{i}.png'
+        image = Image.open(image_path).convert("RGB")
+        image = T.Resize(in_sz)(image)
+        image = image_to_tensor(image).to(device=device)
+        images.append(image)
+    images = torch.stack(images)
     images = images.unsqueeze(0)
     print(f'i: {images.shape}')
     print(f'c: {cam_poses.shape}')
@@ -212,7 +222,9 @@ with torch.no_grad():
         np.uint8
     )
 
-    im_name = os.path.basename(os.path.splitext(image_path_1)[0])
+        
+    #im_name = os.path.basename(os.path.splitext(image_path)[0])
+    im_name = output_name
 
     frames_dir_name = os.path.join(args.output, im_name + "_frames")
     os.makedirs(frames_dir_name, exist_ok=True)
