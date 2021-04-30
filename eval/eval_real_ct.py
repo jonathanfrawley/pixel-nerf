@@ -145,7 +145,8 @@ cam_pose_1[2, -1] = args.radius
 #cam_pose_2 = util.pose_spherical(angle, elevation, radius).to(device=device)
 cam_pose_2 = torch.eye(4, device=device)
 
-angle = (3 * math.pi) / 2
+#angle = (3 * math.pi) / 2
+angle = math.pi / 6.0  # 30 degs
 
 # R_x
 #cam_pose_2[1, 1] = math.cos(angle)
@@ -179,8 +180,10 @@ image_to_tensor = util.get_image_to_tensor_balanced()
 
 with torch.no_grad():
     #for i, image_path in enumerate(inputs):
-    image_path_1 = 'input/1_normalize.png'
-    image_path_2 = 'input/2_normalize.png'
+    #image_path_1 = 'input/1_normalize.png'
+    #image_path_2 = 'input/2_normalize.png'
+    image_path_1 = 'input/0.png'
+    image_path_2 = 'input/1.png'
     image1 = Image.open(image_path_1).convert("RGB")
     image1 = T.Resize(in_sz)(image1)
     image1 = image_to_tensor(image1).to(device=device)
