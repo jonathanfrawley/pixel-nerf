@@ -166,6 +166,7 @@ conf = ConfigFactory.parse_file('conf/exp/ct_single.conf')
 net = NeRFDepthOnly(conf).to(device) 
 
 if resume:
+    # Pretrained model here https://drive.google.com/file/d/13xfQn_4RSLaKp5G-euyeIgqjlbvnyOU1/view?usp=sharing
     print("Resuming from file " + os.path.join(output, "single_ct_nerf.pkl"))
     net = torch.load(os.path.join(output, "single_ct_nerf.pkl"))
 
