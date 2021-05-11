@@ -68,6 +68,7 @@ class NeRFRenderer(torch.nn.Module):
         depth_std=0.01,
         eval_batch_size=100000,
         white_bkgd=False,
+        composite_x_ray=False,
         lindisp=False,
         sched=None,  # ray sampling schedule for coarse and fine rays
     ):
@@ -78,6 +79,8 @@ class NeRFRenderer(torch.nn.Module):
 
         self.noise_std = noise_std
         self.depth_std = depth_std
+
+        self.composite_x_ray = composite_x_ray
 
         self.eval_batch_size = eval_batch_size
         self.white_bkgd = white_bkgd
@@ -224,10 +227,9 @@ class NeRFRenderer(torch.nn.Module):
             sigmas = out[..., 3]  # (B, K)
             if self.training and self.noise_std > 0.0:
                 sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
-
+            
+            
             alphas = 1 - torch.exp(-deltas * torch.relu(sigmas))  # (B, K)
-            deltas = None
-            sigmas = None
             alphas_shifted = torch.cat(
                 [torch.ones_like(alphas[:, :1]), 1 - alphas + 1e-10], -1
             )  # (B, K+1) = [1, a1, a2, ...]
@@ -236,8 +238,19 @@ class NeRFRenderer(torch.nn.Module):
             alphas = None
             alphas_shifted = None
 
-            rgb_final = torch.sum(weights.unsqueeze(-1) * rgbs, -2)  # (B, 3)
             depth_final = torch.sum(weights * z_samp, -1)  # (B)
+
+            if self.composite_x_ray:
+                # Beer's Law
+                # this doesn't take into account that x-rays get blocked which seems wrong.
+                rgb_final = torch.sum(-deltas * torch.relu(sigmas), dim=-1).exp().unsqueeze(-1) # (B)
+            else:
+                rgb_final = torch.sum(weights.unsqueeze(-1) * rgbs, -2)  # (B, 3)
+            
+            deltas = None
+            sigmas = None
+
+            # NOTE: Not sure if this will work for x-ray images
             if self.white_bkgd:
                 # White background
                 pix_alpha = weights.sum(dim=1)  # (B), pixel alpha
@@ -307,7 +320,7 @@ class NeRFRenderer(torch.nn.Module):
     ):
         weights, rgb, depth = rendered_outputs
         if superbatch_size > 0:
-            rgb = rgb.reshape(superbatch_size, -1, 3)
+            rgb = rgb.reshape(superbatch_size, -1, rgb.size(-1))
             depth = depth.reshape(superbatch_size, -1)
             weights = weights.reshape(superbatch_size, -1, weights.shape[-1])
         ret_dict = DotMap(rgb=rgb, depth=depth)

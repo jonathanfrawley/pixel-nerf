@@ -142,6 +142,45 @@ def unproj_map(width, height, f, c=None, device="cpu"):
     unproj /= torch.norm(unproj, dim=-1).unsqueeze(-1)
     return unproj
 
+def unproj_map_variable_sensor(width_pixels, height_pixels, width, height, f, c=None, device="cpu"):
+    """
+    Get camera unprojection map for given image size.
+    [y,x] of output tensor will contain unit vector of camera ray of that pixel.
+
+    Explanation:
+    - Assume focal point is at origin (0,0,0) and sensor is f far away (in z axis)
+    - Vector to pixel (x,y) is (x,y,f) or equivalently (x/f,y/f,1).
+
+    :param width_pixels num pixels over image width
+    :param height_pixels num pixles over image height
+    :param width image width
+    :param height image height
+    :param f focal length, either a number or tensor [fx, fy]
+    :param c principal point, optional, either None or tensor [fx, fy]
+    if not specified uses center of image
+    :return unproj map (height, width, 3)
+    """
+    if c is None:
+        c = [width * 0.5, height * 0.5]
+    else:
+        c = c.squeeze()
+    if isinstance(f, float):
+        f = [f, f]
+    elif len(f.shape) == 0:
+        f = f[None].expand(2)
+    elif len(f.shape) == 1:
+        f = f.expand(2)
+    Y, X = torch.meshgrid(
+        torch.linspace(0, 1, height_pixels, dtype=torch.float32) * height - float(c[1]),
+        torch.linspace(0, 1, width_pixels, dtype=torch.float32) * width - float(c[0]),
+    )
+    X = X.to(device=device) / float(f[0])
+    Y = Y.to(device=device) / float(f[1])
+    Z = torch.ones_like(X)
+    unproj = torch.stack((X, -Y, -Z), dim=-1)
+    unproj /= torch.norm(unproj, dim=-1).unsqueeze(-1) # Not sure if this should really be here
+    return unproj
+
 
 def coord_from_blender(dtype=torch.float32, device="cpu"):
     """
@@ -272,7 +311,44 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False):
         .expand(num_images, height, width, -1)
     )
     return torch.cat(
-        (cam_centers, cam_raydir, cam_nears, cam_fars), dim=-1
+        (cam_centers, cam_raydir, cam_nears, cam_fars), dim=-1 # 3, 3, 1, 1
+    )  # (B, H, W, 8)
+
+def gen_rays_variable_sensor(poses, width_pixels, height_pixels, width, height, 
+                             focal, z_near, z_far, c=None):
+    """
+    :param width_pixels: number of pixels over imagewidth
+    :param height_pixels: number of pixels over image height
+    :param width: sensor width
+    :param height: sensor height
+
+    Generate camera rays
+    :return (B, H, W, 8)
+    """
+    num_images = poses.shape[0]
+    device = poses.device
+    cam_unproj_map = (
+        unproj_map_variable_sensor(width_pixels, height_pixels, width, height, focal.squeeze(), c=c, device=device)
+        .unsqueeze(0)
+        .repeat(num_images, 1, 1, 1)
+    )
+    cam_centers = poses[:, None, None, :3, 3].expand(-1, height_pixels, width_pixels, -1)
+    cam_raydir = torch.matmul(
+        poses[:, None, None, :3, :3], cam_unproj_map.unsqueeze(-1)
+    )[:, :, :, :, 0]
+
+    cam_nears = (
+        torch.tensor(z_near, device=device)
+        .view(1, 1, 1, 1)
+        .expand(num_images, height_pixels, width_pixels, -1)
+    )
+    cam_fars = (
+        torch.tensor(z_far, device=device)
+        .view(1, 1, 1, 1)
+        .expand(num_images, height_pixels, width_pixels, -1)
+    )
+    return torch.cat(
+        (cam_centers, cam_raydir, cam_nears, cam_fars), dim=-1 # 3, 3, 1, 1
     )  # (B, H, W, 8)
 
 
