@@ -159,10 +159,15 @@ class PixelNeRFNet(torch.nn.Module):
 
             # Transform query points into the camera spaces of the input views
             xyz = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
-            xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
-                ..., 0
-            ]
-            xyz = xyz_rot + self.poses[:, None, :3, 3]
+
+            # self.poses is set in self.encode and is for the encoded views
+            # so for a single CT scan it is initialised as empty (should be identity?)
+            # Hack for now to not do this processing and instead do it in NeRFDepthOnly
+            if self.use_encoder:
+                xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
+                    ..., 0
+                ]
+                xyz = xyz_rot + self.poses[:, None, :3, 3]
 
             if self.d_in > 0:
                 # * Encode the xyz coordinates
