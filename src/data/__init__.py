@@ -3,6 +3,7 @@ import os
 from .MultiObjectDataset import MultiObjectDataset
 from .DVRDataset import DVRDataset
 from .SRNDataset import SRNDataset
+from .drrDataset import drrDataset
 
 from .data_util import ColorJitterDataset
 
@@ -22,6 +23,8 @@ def get_split_dataset(dataset_type, datadir, want_split="all", training=True, **
     if dataset_type == "srn":
         # For ShapeNet single-category (from SRN)
         dset_class = SRNDataset
+    elif dataset_type == "drr":
+        dset_class = drrDataset
     elif dataset_type == "multi_obj":
         # For multiple-object
         dset_class = MultiObjectDataset
