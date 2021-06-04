@@ -99,8 +99,7 @@ class drrDataset(torch.utils.data.Dataset):
                               skip_header=1, skip_footer=12), np.array([0.0,0.0,0.0,1.0]))))
             P = P[:3]
 
-            K, R, t = cv2.decomposeProjectionMatrix(P)[:3]
-            K = K / K[2, 2]
+            _, R, t = cv2.decomposeProjectionMatrix(P)[:3]
 
             pose = np.eye(4, dtype=np.float32)
             pose[:3, :3] = R.transpose()
